@@ -1,3 +1,4 @@
+//Run with ES6+
 "use strict";
 const rl = require('readline-sync');
 class Scope {
@@ -8,16 +9,17 @@ class Scope {
 		this.variables[name] = value;
 	}
 	getSymbol(name){
-		return this.variables[name];
+		return this.variables[name]; 
 	}
 }
 class LFunction {
-	constructor(func,args) {
+	constructor(func,...args) {
+    //console.log('rargs',args)
 		this.func = func;
 		this.args = args;
 	}
 	evaluate(scope) {
-		return actionMap[this.func]['function'](scope, ...args);
+		return actionMap[this.func]['function'](scope, ...this.args);
 	}
 }
 class LNumber {
@@ -33,21 +35,25 @@ class LSymbol {
 		this.name = name;
 	}
 	evaluate(scope) {
-		return scope.getSymbol(name)
+    //console.log('scope',scope)
+		return scope.getSymbol(this.name) || this.name;
 	}
 }
-const tokenize = str => str.split(' ').map(item => item.trim()).filter(item => item.length);
 const actionMap = {
 	set: {
 		args: 2,
-		'function': function(scope, arg1, arg2) {
+		'function': function(scope,arg1,arg2) {
 			scope.setSymbol(arg1.evaluate(), arg2,evaluate());
 		}
 	},
 	print: {
-		args: 1,
-		'function': function(scope, arg1) {
-			console.log(arg1.evaluate());
+		args: 'infinite',
+		'function': function(scope, ...args) {
+			for(let i = 0; i <= args.length-1; ++i) {
+				args[i] = args[i].evaluate(scope)
+			}
+			const outputStr = Array.from(args).join(' ')
+			console.log(outputStr);
 		}
 	},
 	getvar: {
@@ -61,23 +67,38 @@ const actionMap = {
 		}
 	},
 }
+const tokenize = str => str.split(' ').map(item => item.trim()).filter(item => item.length);
 const toAST = tokens => {
+  console.log(tokens)
 	let pos = 0;
 	const peek = () => tokens[pos];
 	const next = () => tokens[++pos];
 	let token = peek();
 	const tokenToAST = ctoken => {
+    //console.log('ctoken',ctoken);
 		if(/^\d+$/.test(ctoken)) {
+			//console.log('doing int', ctoken)
 			return new LNumber(parseInt(ctoken,10));
 		} else if(/^\d+\.\d+$/.test(ctoken)) {
 			return new LNumber(parseFloat(ctoken));
-		} else if(/[0-9a-zA-Z][0-9a-zA-Z_]*/.test(ctoken) && !(ctoken in actionMap)) {
+		} else if(/^[0-9a-zA-Z][0-9a-zA-Z_]*$/.test(ctoken) && !(ctoken in actionMap)) {
 			return new LSymbol(ctoken);
 		} else if(/[0-9a-zA-Z][0-9a-zA-Z_]*/.test(ctoken) && ctoken in actionMap) {
 			let args = [ctoken];
-			for(let i=1; i<=actionMap[ctoken].args;++i) {
-				args.push(tokenToAST(next()));
+			if(actionMap[ctoken].args === 'infinite') {
+				let currentFuncArg = next();
+				while(currentFuncArg) {
+					//console.log('current token',currentFuncArg)
+					//console.log('parsed',tokenToAST(currentFuncArg))
+					args.push(tokenToAST(currentFuncArg));
+					currentFuncArg = next();
+				}
+			} else {
+				for(let i = 0; i <= actionMap[ctoken].args; ++i) {
+					args.push(toAST(next()));
+				}
 			}
+			//console.log('args',args);
 			return new LFunction(...args);
 		}
 	}
@@ -87,6 +108,6 @@ const GlobalScope = new Scope();
 let code = rl.question('>> ');
 const tokenized = tokenize(code);
 const ast = toAST(tokenized);
-console.log(tokenized)
-console.log(ast)
+console.log('tokens',tokenized)
+console.log('ast',ast)
 ast.evaluate(GlobalScope);
